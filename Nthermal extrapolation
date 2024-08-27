@@ -1,0 +1,47 @@
+import numpy as np
+from scipy.optimize import curve_fit
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+# Input given data points
+x = [0.3, 0.5, 0.68, 0.8, 0.4, 0.66, 0.75, 0.83, 0.32, 0.64, 0.72]
+y = [200, 300, 500, 1000, 100, 200, 300, 500, 500, 1000, 1500]
+z = [1200, 1200, 1200, 1200, 1000, 1000, 1000, 1000, 1500, 1500, 1500]
+data = np.array([x, y, z]).T
+
+
+# Define mathematical function for curve fitting
+def func(xy, a, b, c, d, e, f):
+    x, y = xy
+    return a + b * x + c * y + d * x**2 + e * y**2 + f * x * y
+
+
+# Perform curve fitting
+popt, pcov = curve_fit(func, (x, y), z)
+
+# Print optimized parameters
+print(popt)
+
+# Create 3D plot of the data points and the fitted curve
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+ax.scatter(x, y, z, color='blue')
+x_range = np.linspace(0, 1, 50)
+y_range = np.linspace(0, 2000, 50)
+X, Y = np.meshgrid(x_range, y_range)
+Z = func((X, Y), *popt)
+ax.plot_surface(X, Y, Z, cmap='viridis', alpha=0.5)
+ax.set_xlabel('N thermal')
+ax.set_ylabel('Solar Input (kW/m^2)')
+ax.set_zlabel('Temperature (°C)')
+
+# Add the title to the 3D chart
+ax.set_title("Relationship between N thermal, Temperature, and Solar Input")
+
+# Add a text label for the equation
+equation_text = equation_text = f"z = {popt[0]:.5f} + {popt[1]:.5f}*x + {popt[2]:.5f}*y + {popt[3]:.5f}*x^2 + {popt[4]:.5f}*y^2 + {popt[5]:.5f}*x*y"
+# Assuming x_range is defined earlier
+ax.text2D(0.1, 0.9, equation_text, transform=ax.transAxes, fontsize=10)
+# Adjust position and font size as needed
+
+plt.show()
