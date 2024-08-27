@@ -1,0 +1,121 @@
+import math
+import numpy as np 
+
+# Solar Irradiance (daily average and average for sunlight hours in watts/m^2)
+Avrinsolationperdaykwh = 6.803
+Solarirradiance = Avrinsolationperdaykwh * 1000 / 12
+#Heat transfer fluid pipe length and number of recievers per pipe
+pipelength = 1000 #meters
+splitoffpipe = 4
+
+# Mirror energy loss 
+mirrorrel = 0.93
+totrap = mirrorrel * Solarirradiance
+
+# Working from the heat backwards
+FlametempC = 1100
+ReactortempC = 850
+ReactorscaleW = 200000000
+HTFspecificheat = 5.19 # in joules / grams C!
+HTFspecificheatinkg = HTFspecificheat * 1000
+
+# Flow rate kg/s Heat Transfer Fluid
+# Q=mc*dt --> m/s=(q/s)/cdt
+fluidkgpers = (ReactorscaleW/(HTFspecificheatinkg*(FlametempC-ReactortempC)))
+
+#Finding density at different pressures
+#rho=PM/RT
+# This is ideal gas law, and not exactly ideal gas. This is an assumption.
+FlametempK = FlametempC + 273.15
+pressurepascals = 7000000
+molarmassofgas = 4.002602
+idealgasconstant = 8.314
+density =(pressurepascals*molarmassofgas/1000)/(idealgasconstant*FlametempK)
+
+##Finding Heat Loss in pipe in both watts and degrees##
+
+r1 = 0.2453 #radius of fluid
+r2 = 0.3048 #inner radius of pipe: from its center to the begining of the insulating material
+rinnerinsulation = 0.4572 #radius of the pipe to the outside of the inner insulation (the durablanket 2600). This uses 6 inches as the thickness of the inner insulation.
+r3= 0.6096 #outer radius of pipe: from the center to the end of insulating material
+kinsulation = 0.06 #thermal conductivity of outer insulation (mineral wool)
+kinnerinsulation = 0.45 #thermal conductivity of inner insulation(durablanket 2600)
+hout = 1 #convective heat transfer coefficient between the outer insulation surface and the outside
+soiltempK = 298.15 #temperature of the soil in kelvin
+kpipe = 195 #thermal conductivity of pipe material (NOT insulation)
+
+heatlossininsulatedpipeinwatts = (2 * math.pi * pipelength * r3 * (FlametempK - soiltempK)) / ((1 / hout) + 
+(r3 * math.log(r3 /rinnerinsulation) / kinsulation) + 
+(r3 * math.log(r2 / r1) / kpipe) +
+(r3 * math.log(rinnerinsulation /r2) /kinnerinsulation))
+print (f"heat loss in insulated pipe: {heatlossininsulatedpipeinwatts} watts per pipe")
+
+# Flow rate in each pipe and how many pipes
+flowspeedmpers = 10 #m/s
+crossectionalarea = math.pi * r1 * r1 #m^2
+pipeflowratekg = flowspeedmpers * crossectionalarea * density
+pipeamount = math.ceil (fluidkgpers / pipeflowratekg)
+print(f"amount of main pipes: {pipeamount}")
+pipefluidkgpers = fluidkgpers/pipeamount
+
+#Find heat loss in degrees of each pipe
+#q=mc*dt
+#dt=(q/s)/((m/s)c)
+heatlossininsulatedpipeindegrees =  heatlossininsulatedpipeinwatts / (pipefluidkgpers * HTFspecificheatinkg)
+print (f"heat loss in insulated pipe: {heatlossininsulatedpipeindegrees} degrees per pipe")
+
+# Temperature and wattage requirements at the begining
+beforepipetemp = FlametempC + heatlossininsulatedpipeindegrees
+beforepipewattage = ReactorscaleW + (heatlossininsulatedpipeinwatts*pipeamount)
+print(f"before entering pipe temperature: {beforepipetemp} degrees")
+print(f"before entering pipe wattage: {beforepipewattage} watts")
+
+#Heat loss on the pipe back
+outgoingdensity =(pressurepascals*molarmassofgas/1000)/(idealgasconstant*(ReactortempC+273.15))
+outgoingflowrate = fluidkgpers/outgoingdensity
+heatlosswattback = (2 * math.pi * pipelength * r3 * (ReactortempC+273.15 - soiltempK)) / ((1 / hout) + (r3 * math.log(r3 / rinnerinsulation) / kinsulation) + (r3 * math.log(r2 / r1) / kpipe) + (r3 * math.log(rinnerinsulation /r2) /kinnerinsulation))
+heatlosswaybackindegrees =  heatlosswattback / (pipefluidkgpers * HTFspecificheatinkg)
+enteringheat = ReactortempC - heatlosswaybackindegrees
+print(f" thermal trap heat transfer fluid input temperature in celcius: {enteringheat}")
+
+# Heat transfer helium fluids
+#Q=mc*dt
+# We assume that there is negligible heat loss in this step and that it is calculated in the nthermal
+wattagetobeaddedbysun = fluidkgpers * HTFspecificheatinkg * (beforepipetemp - enteringheat)
+print(f"wattage to be added by sun: {wattagetobeaddedbysun} W ")
+
+wattagetobeaddedbysunperpipe = wattagetobeaddedbysun / (pipeamount*splitoffpipe)
+
+# calculating nthermal
+# final input = nthermal * solar input * 1000= wattagetobeaddedbysun
+# solar input = wattawattagetobeaddedbysun / (1000 * nthermal)
+# temp = 870.41465 + 322.85459*nthermal + 1.7305*(wattawattagetobeaddedbysun / nthermal) - 534.47886*nthermal^2 -0.00018*(wattawattagetobeaddedbysun / nthermal)^2 - 1.41451*wattagetobeaddedbysun
+
+xsquaredcoeff = beforepipetemp -870 + (1.41451*wattagetobeaddedbysunperpipe/1000)
+coeff = [534.47886, -322.85459, xsquaredcoeff, -1.73 * wattagetobeaddedbysunperpipe/1000, 0.00018*(wattagetobeaddedbysunperpipe **2)/(1000*1000)] 
+
+def choose_real_positive_root(roots):
+  for root in roots:
+    if np.isreal(root) and root > 0:
+      return root
+  return None
+
+roots = np.roots(coeff)
+print ( np.roots(coeff))
+real_positive_root = choose_real_positive_root(roots)
+if real_positive_root is not None:
+  # Use enumerate to get both the index and the root
+  for i, root in enumerate(roots):
+    if root == real_positive_root:
+      print(f"The real and positive root is: {root.real} at index {i}")  # Get the real part
+      nthermal = root.real
+      break
+else:
+  print("No real and positive root found. There is an error in inputs. Please adjust number of reactors or temperature and wattage requirements.")
+
+
+## Land area calculation and necessary input
+necesarysuninput = wattagetobeaddedbysun / nthermal
+totalareaneeded = necesarysuninput / totrap
+print(f" Necessary sun input: {necesarysuninput} W")
+print(f" Total area needed: {totalareaneeded} m^2")
